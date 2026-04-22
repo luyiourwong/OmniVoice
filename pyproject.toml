@@ -77,17 +77,14 @@ torchaudio = [
 
 [[tool.uv.index]]
 name = "pytorch-cuda"
-# Use PyTorch built for NVIDIA Toolkit version 12.8.
+# Use PyTorch built for NVIDIA Toolkit version 13.0.
 # Available versions: https://pytorch.org/get-started/locally/
-url = "https://download.pytorch.org/whl/cu128"
+url = "https://download.pytorch.org/whl/cu130"
 # Only use this index when explicitly requested by `tool.uv.sources`.
 explicit = true
 
 [tool.uv]
-constraint-dependencies = [
-    "torch==2.8.0",
-    "torchaudio==2.8.0",
-]
+constraint-dependencies = []
 
 [tool.hatch.build.targets.sdist]
 include = ["omnivoice"]
