@@ -29,9 +29,9 @@ from typing import Any, Dict
 
 import gradio as gr
 import numpy as np
-import torch
 
-from omnivoice import OmniVoice, OmniVoiceGenerationConfig
+from omnivoice import OmniVoiceGenerationConfig
+from omnivoice.shared import get_model
 from omnivoice.utils.lang_map import LANG_NAMES, lang_display_name
 
 
@@ -517,21 +517,11 @@ def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    device = args.device or get_best_device()
-
     checkpoint = args.model
     if not checkpoint:
         parser.print_help()
         return 0
-    logging.info(f"Loading model from {checkpoint}, device={device} ...")
-    model = OmniVoice.from_pretrained(
-        checkpoint,
-        device_map=device,
-        dtype=torch.float16,
-        load_asr=not args.no_asr,
-        asr_model_name=args.asr_model,
-    )
-    print("Model loaded.")
+    model = get_model(load_asr=not args.no_asr)
 
     demo = build_demo(model, checkpoint)
 
