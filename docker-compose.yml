@@ -17,7 +17,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./cache:/root/.cache/huggingface
+      - ./cache:/root/.cache
     command:
       - omnivoice-demo
       - --model
@@ -26,3 +26,32 @@ services:
       - "7860"
       - --ip
       - 0.0.0.0
+
+  omnivoice-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omnivoice:latest
+    container_name: omnivoice-server
+    ports:
+      - "8007:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    env_file:
+      - .env
+    environment:
+      - MODEL_PATH=k2-fsa/OmniVoice
+      - DEVICE=cuda
+      - VOICES_DIR=/app/voices
+      - HF_HOME=/root/.cache
+      #- DEBUG_LOGGING=True
+    volumes:
+      - ./cache:/root/.cache
+      - ./voices:/app/voices
+    command:
+      - omnivoice-server

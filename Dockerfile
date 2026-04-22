@@ -12,11 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.13-venv \
     python3.13-dev \
     git \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3.13 -m venv /app/.venv && /app/.venv/bin/pip install --no-cache-dir uv
 
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/.venv/bin:${PATH}" \
+    UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock README.md ./
 
@@ -26,4 +28,4 @@ COPY . .
 
 RUN uv sync --frozen --no-dev
 
-ENTRYPOINT ["uv", "run"]
+ENTRYPOINT ["uv", "run", "--frozen"]
