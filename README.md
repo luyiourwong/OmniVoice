@@ -18,7 +18,7 @@
 
 OmniVoice is a state-of-the-art massively multilingual zero-shot text-to-speech (TTS) model supporting over 600 languages. Built on a novel diffusion language model-style architecture, it generates high-quality speech with superior inference speed, supporting voice cloning and voice design.
 
-**Contents**: [Key Features](#key-features) | [Installation](#installation) | [Quick Start](#quick-start) | [Python API](#python-api) | [Command-Line Tools](#command-line-tools) | [Training & Evaluation](#training--evaluation) | [Discussion](#discussion--communication) | [Citation](#citation)
+**Contents**: [Key Features](#key-features) | [Installation](#installation) | [Quick Start](#quick-start) | [Python API](#python-api) | [Command-Line Tools](#command-line-tools) | [Docker & API](#docker--api) | [Training & Evaluation](#training--evaluation) | [Discussion](#discussion--communication) | [Citation](#citation)
 
 ## Key Features
 
@@ -276,6 +276,165 @@ The test list is a JSONL file where each line is a JSON object:
 Only `id` and `text` are mandatory fields. `ref_audio` and `ref_text` are used in voice cloning mode. `instruct` is used in voice design mode. If no reference audio or instruct are provided, the model will generate text in a random voice.
 
 `language_id`, `duration`, and `speed` are optional. `duration` (in seconds) fixes the output length; `speed` controls the speaking rate. If `duration` and `speed` are both provided, `speed` will be ignored.
+
+---
+
+## Docker & API
+
+Deploy OmniVoice with Docker Compose — includes a Gradio demo and an OpenAI-compatible REST API.
+
+### Quick Start
+
+```bash
+# Create .env file with your HuggingFace token
+echo "HF_TOKEN=your_token_here" > .env
+
+# Build and start
+docker compose up --build
+```
+
+Two services are available:
+
+| Service | Port | Description |
+|---|---|---|
+| `omnivoice-demo` | 7860 | Gradio web UI |
+| `omnivoice-server` | 8000 | OpenAI-compatible REST API |
+
+### REST API
+
+The API is compatible with the [OpenAI Speech endpoint](https://platform.openai.com/docs/api-reference/audio/createSpeech).
+
+#### Create Speech
+
+```bash
+curl -X POST http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omnivoice",
+    "input": "Hello world",
+    "voice": "default",
+    "response_format": "wav",
+    "speed": 1.0
+  }' \
+  --output speech.wav
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `model` | string | `"omnivoice"` | Model identifier |
+| `input` | string | — | Text to synthesize |
+| `voice` | string | `"default"` | Voice ID (use `default` for auto-selected first voice or system default) |
+| `response_format` | string | `"wav"` | Output format: `wav`, `mp3`, `opus`, `flac`, `aac` |
+| `speed` | float | `1.0` | Speech speed (`>1.0` faster, `<1.0` slower) |
+| `instructions` | string | — | Voice design instructions (overrides voice metadata) |
+| `stream_format` | string | `"audio"` | Response format: `"audio"` (binary) or `"sse"` (Server-Sent Events) |
+| `seed` | integer | — | Random seed for reproducibility (same seed = same voice) |
+
+**Default Voice:**
+
+When `voice` is `"default"`:
+- If any voices exist, the first one in the list is used
+- If no voices exist, a system-generated default voice (female, middle-aged) is created automatically
+
+**Reproducibility:**
+
+Use the `seed` parameter to get consistent voice output across calls:
+
+```bash
+curl -X POST http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Hello world", "seed": 42}' \
+  --output speech.wav
+```
+
+**SSE Streaming:**
+
+When `stream_format` is `"sse"`, the response is sent as Server-Sent Events with hex-encoded audio chunks:
+
+```bash
+curl -X POST http://localhost:8000/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Hello world",
+    "stream_format": "sse"
+  }'
+```
+
+Response:
+```
+data: 52494646...
+data: 0a0b0c0d...
+data: [DONE]
+```
+
+#### Create Voice
+
+**Clone a voice from reference audio** (voice_type defaults to "clone" when audio_sample is provided):
+
+```bash
+curl -X POST http://localhost:8000/v1/audio/voices \
+  -F "name=my-voice" \
+  -F "audio_sample=@reference.wav" \
+  -F "ref_text=Transcription of reference audio" \
+  -F "consent=I have permission to use this voice"
+```
+
+**Create a designed voice** (voice_type defaults to "design" when instructions is provided):
+
+```bash
+curl -X POST http://localhost:8000/v1/audio/voices \
+  -F "name=custom-voice" \
+  -F "instructions=Male / 男, Young Adult / 青年, British Accent / 英国口音"
+```
+
+**Explicit voice type:**
+
+```bash
+curl -X POST http://localhost:8000/v1/audio/voices \
+  -F "name=my-voice" \
+  -F "voice_type=clone" \
+  -F "audio_sample=@reference.wav"
+```
+
+#### List Voices
+
+```bash
+curl http://localhost:8000/v1/audio/voices
+```
+
+#### Get Voice Details
+
+```bash
+curl http://localhost:8000/v1/audio/voices/<voice_id>
+```
+
+#### Delete Voice
+
+```bash
+curl -X DELETE http://localhost:8000/v1/audio/voices/<voice_id>
+```
+
+#### List Models
+
+```bash
+curl http://localhost:8000/v1/models
+```
+
+### Voice Storage
+
+Voices are saved to `./voices/` (configurable via `VOICES_DIR` env var). Each voice directory contains:
+
+- `metadata.json` — voice settings and config
+- `ref.wav` — reference audio (clone type only)
+
+The folder is mounted to `/app/voices` in the container for persistence.
+
+### Model Caching
+
+- **Main models** (`./cache/`) — OmniVoice and HuggingFace models, mounted to `/root/.cache/huggingface`
+- **ASR models** (`./asr-cache/`) — Whisper ASR model for auto-transcription, mounted to `/root/.cache/asr`
 
 ---
 
