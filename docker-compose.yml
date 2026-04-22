@@ -1,0 +1,28 @@
+services:
+  omnivoice-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omnivoice:latest
+    container_name: omnivoice-demo
+    ports:
+      - "7860:7860"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    env_file:
+      - .env
+    volumes:
+      - ./cache:/root/.cache/huggingface
+    command:
+      - omnivoice-demo
+      - --model
+      - k2-fsa/OmniVoice
+      - --port
+      - "7860"
+      - --ip
+      - 0.0.0.0
