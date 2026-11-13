@@ -82,6 +82,12 @@ class SpeechRequest(BaseModel):
     speed: float = DEFAULT_SPEED
     instructions: str | None = None
     stream_format: str = "audio"
+    # Random seed for this request; overrides the voice's seed (same seed = same output).
+    seed: int | None = None
+
+
+# Generation settings for a one-off designed voice (same as newly created voices).
+DEFAULT_DESIGN_CONFIG = {"num_step": 32, "guidance_scale": 2.0, "denoise": True}
 
 
 def _set_seed(seed: int | None) -> None:
@@ -349,6 +355,15 @@ async def create_speech(req: SpeechRequest):
 
     gen_kwargs = {"speed": req.speed}
 
+    # No voice but instructions: design a voice for this request only, instead of falling
+    # back to the first saved voice (which ignored the instructions when it was a clone).
+    if req.instructions and req.voice in (None, "", DEFAULT_VOICE):
+        gen_kwargs.update(DEFAULT_DESIGN_CONFIG)
+        gen_kwargs["instruct"] = req.instructions
+        seed = req.seed if req.seed is not None else DEFAULT_SEED
+        logger.debug("create_speech: one-off design voice, instruct=%s, seed=%s", req.instructions, seed)
+        return _speech_response(req, m, gen_kwargs, seed)
+
     voice_id = _find_voice_by_name(req.voice) or req.voice
     logger.debug("create_speech: resolved voice_id=%s (from=%s)", voice_id, req.voice)
     if not voice_id or voice_id == "default":
@@ -412,6 +427,8 @@ async def create_speech(req: SpeechRequest):
             voice_meta["ref_audio_file"] = "ref.wav"
         _save_voice_meta(voice_id, voice_meta)
     seed = voice_meta.get("seed") if voice_meta else DEFAULT_SEED
+    if req.seed is not None:
+        seed = req.seed  # the request's seed wins over the voice's
     if not voice_meta and req.voice not in (None, "", "default"):
         available = sorted(_list_voice_dirs())
         raise HTTPException(
@@ -436,6 +453,11 @@ async def create_speech(req: SpeechRequest):
             if instruct:
                 gen_kwargs["instruct"] = instruct
 
+    return _speech_response(req, m, gen_kwargs, seed)
+
+
+def _speech_response(req: SpeechRequest, m, gen_kwargs: dict, seed: int | None):
+    """Generate the speech and return it in the requested format (or as SSE)."""
     try:
         _set_seed(seed)
         logger.debug("create_speech: deterministic_mode=%s, using seed=%s", DETERMINISTIC_MODE, seed)
